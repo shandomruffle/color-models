@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+    input[type="range"] {
+        width: 400px;
+    }
+    * {
+        font-family: "Comfortaa", 'sans-serif';
+    }
+    .picker {
+        background: hotpink;
+        border-radius: 5px;
+        padding: 1em;
+        margin: auto;
+        width: min-content;
+        display: flex;
+        flex-flow: row;
+    }
+    canvas {
+        display: flex;
+        margin: auto;
+    }
+    .picker div {
+        display: flex;
+        flex-flow: column;
+    }
+    div.number-value {
+        width: 3em;
+        text-align: center;
+    }
+    </style>
+    <meta charset="utf-8">
+    <title>Ultimate Color Picker</title>
+</head>
+<body>
+    <div class="picker" id="rgb-picker">
+        <div>
+            <label for="redSlider">Red:</label>
+            <label for="greenSlider">Green:</label>
+            <label for="blueSlider">Blue:</label>
+        </div>
+        <div>
+            <input type="range" id="redSlider" min="0" max="255" value="0" step="0.01">
+            <input type="range" id="greenSlider" min="0" max="255" value="0" step=0.01>
+            <input type="range" id="blueSlider" min="0" max="255" value="0" step=0.01>
+        </div>
+        <div class="number-value">
+            <span id="redValue">0</span>
+            <span id="greenValue">0</span>
+            <span id="blueValue">0</span>
+        </div>
+    </div>
+    <br>
+    <div class="picker" id="cmyk-picker">
+        <div style="width: max-content">
+            <label for="cyanSlider">Cyan:</label>
+            <label for="magentaSlider">Magenta:</label>
+            <label for="yellowSlider">Yellow:</label>
+            <label for="blackSlider">Key (Black):</label>
+        </div>
+        <div>
+            <input type="range" id="cyanSlider" min="0" max="100" value="0" step=0.01>
+            <input type="range" id="magentaSlider" min="0" max="100" value="0" step=0.01>
+            <input type="range" id="yellowSlider" min="0" max="100" value="0" step=0.01>
+            <input type="range" id="blackSlider" min="0" max="100" value="0" step=0.01>
+        </div>
+        <div class="number-value">
+            <span id="cyanValue">0</span>
+            <span id="magentaValue">0</span>
+            <span id="yellowValue">0</span>
+            <span id="blackValue">0</span>
+        </div>
+    </div>
+    <br>
+    <div class="picker" id="hsv-picker">
+        <div>
+            <label for="hueSlider">Hue:</label>
+            <label for="lightnessSlider">Lightness:</label>
+            <label for="saturationSlider">Saturation:</label>
+        </div>
+        <div>
+            <input type="range" id="hueSlider" min="0" max="360" value="0" step=0.01>
+            <input type="range" id="lightnessSlider" min="0" max="100" value="0" step=0.01>
+            <input type="range" id="saturationSlider" min="0" max="100" value="0" step=0.01>
+        </div>
+        <div class="number-value">
+            <span id="hueValue">0</span>
+            <span id="lightnessValue">0</span>
+            <span id="saturationValue">0</span>
+        </div>
+    </div>
+    <br>
+    <canvas id="hs-canvas"></canvas>
+    <script>
+    let c = {};
+    for (component of ['r', 'g', 'b', 'c', 'm', 'y', 'k', 'h', 'l', 's']) {
+        c[component] = 0;
+    }
+
+    function updateSlider(text, slider, value) {
+        let v = value * slider.max;
+        slider.value = v;
+        text.innerText = Math.round(v);
+    }
+    
+    function clamp() {
+        for (comp in c) {
+            c[comp] = Math.min(1, Math.max(c[comp], 0));
+        }
+    }
+
+    function moveCmykToRgb() {
+        c.r = (1 - c.c) * (1 - c.k);
+        c.g = (1 - c.m) * (1 - c.k);
+        c.b = (1 - c.y) * (1 - c.k);
+        clamp();
+    }
+
+    function hlsToRgb(h, l, s) {
+        let r, g, b;
+        if (s === 0) {
+            r = g = b = l;
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1 / 6) return p + (q - p) * 6 * t;
+                if (t < 1 / 2) return q;
+                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                return p;
+            };
+     
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1 / 3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1 / 3);
+        }
+        return [r, g, b];
+    }
+
+    function moveHlsToRgb() {
+        [c.r, c.g, c.b] = hlsToRgb(c.h, c.l, c.s);
+        clamp();
+    }
+
+    function moveRgbToCmyk() {
+        c.k = 1 - 1 * Math.max(c.r, c.g, c.b);
+        c.c = (1 - c.r - c.k) / (1 - c.k);
+        c.m = (1 - c.g - c.k) / (1 - c.k);
+        c.y = (1 - c.b - c.k) / (1 - c.k);
+        if (c.k == 1) {
+            c.c = 0;
+            c.m = 0;
+            c.y = 0;
+        }
+        clamp();
+    }
+
+    function moveRgbToHLS() {
+        const r = c.r;
+        const b = c.b;
+        const g = c.g;
+        const min = Math.min(r, g, b);
+        const max = Math.max(r, g, b);
+        const d = max - min;
+        if (d == 0) c.h = +hueSlider.value; else {
+            switch(max) {
+                case r:
+                    var segment = (g - b) / d;
+                    var shift   = 0 / 60;
+                    if (segment < 0) {  
+                        shift = 360 / 60;
+                    }
+                    c.h = segment + shift;
+                    break;
+                case g:
+                    var segment = (b - r) / d;
+                    var shift   = 120 / 60; 
+                    c.h = segment + shift;
+                    break;
+                case b:
+                    var segment = (r - g) / d;
+                    var shift   = 240 / 60; 
+                    c.h = segment + shift;
+                    break;
+            }
+            if (c.h < 0) console.error(r, g, b, c.h);
+            c.h = c.h / 6 % 1;
+        }
+        c.l = (max + min) / 2;
+        c.s = d / (1 - Math.abs(2 * c.l - 1));
+        if (isNaN(c.s)) {
+            c.s = 0;
+        }
+        clamp();
+    }
+
+    const redSlider = document.getElementById("redSlider");
+    const greenSlider = document.getElementById("greenSlider");
+    const blueSlider = document.getElementById("blueSlider");
+
+    const redValue = document.getElementById("redValue");
+    const greenValue = document.getElementById("greenValue");
+    const blueValue = document.getElementById("blueValue");
+
+    const cyanSlider = document.getElementById("cyanSlider");
+    const magentaSlider = document.getElementById("magentaSlider");
+    const yellowSlider = document.getElementById("yellowSlider");
+    const blackSlider = document.getElementById("blackSlider");
+
+    const cyanValue = document.getElementById("cyanValue");
+    const magentaValue = document.getElementById("magentaValue");
+    const blackValue = document.getElementById("blackValue");
+
+    const hueSlider = document.getElementById("hueSlider");
+    const saturationSlider = document.getElementById("saturationSlider");
+    const valueSlider = document.getElementById("valueSlider");
+    const lightnessSlider = document.getElementById("lightnessSlider");
+
+    const hueValue = document.getElementById("hueValue");
+    const lightnessValue = document.getElementById("lightnessValue");
+    const saturationValue = document.getElementById("saturationValue");
+
+    redSlider       .addEventListener("input", function(v) {c.r = v.target.value/v.target.max; updateFromRGB()});
+    greenSlider     .addEventListener("input", function(v) {c.g = v.target.value/v.target.max; updateFromRGB()});
+    blueSlider      .addEventListener("input", function(v) {c.b = v.target.value/v.target.max; updateFromRGB()});
+
+    cyanSlider      .addEventListener("input", function(v) {c.c = v.target.value/v.target.max; updateFromCMYK()});
+    magentaSlider   .addEventListener("input", function(v) {c.m = v.target.value/v.target.max; updateFromCMYK()});
+    yellowSlider    .addEventListener("input", function(v) {c.y = v.target.value/v.target.max; updateFromCMYK()});
+    blackSlider     .addEventListener("input", function(v) {c.k = v.target.value/v.target.max; updateFromCMYK()});
+
+    hueSlider       .addEventListener("input", function(v) {c.h = v.target.value/v.target.max; updateFromHLS()});
+    lightnessSlider .addEventListener("input", function(v) {c.l = v.target.value/v.target.max; updateFromHLS()});
+    saturationSlider.addEventListener("input", function(v) {c.s = v.target.value/v.target.max; updateFromHLS()});
+    
+    function updateBackground() {
+        let s = v => Math.round(v * 255);
+        document.body.style.backgroundColor = `rgb(${s(c.r)}, ${s(c.g)}, ${s(c.b)})`;
+    }
+
+    function updateFromRGB() {
+        moveRgbToCmyk();
+        moveRgbToHLS();
+        reloadColor();
+    }
+
+    function updateFromCMYK() {
+        moveCmykToRgb();
+        moveRgbToHLS();
+        reloadColor();
+    }
+
+    function updateFromHLS() {
+        moveHlsToRgb();
+        moveRgbToCmyk();
+        reloadColor();
+    }
+
+    function reloadColor() {
+        updateBackground();
+
+        updateSlider(redValue, redSlider, c.r);
+        updateSlider(greenValue, greenSlider, c.g);
+        updateSlider(blueValue, blueSlider, c.b);
+
+        updateSlider(cyanValue, cyanSlider, c.c);
+        updateSlider(magentaValue, magentaSlider, c.m);
+        updateSlider(yellowValue, yellowSlider, c.y);
+        updateSlider(blackValue, blackSlider, c.k);
+
+        updateSlider(hueValue, hueSlider, c.h);
+        updateSlider(lightnessValue, lightnessSlider, c.l);
+        updateSlider(saturationValue, saturationSlider, c.s);
+
+        drawCanvasHS();
+    }
+
+    function drawCanvasHS() {
+        const canvas = canvasHS();
+        window.w = document.getElementById("hsv-picker").clientWidth;
+        canvas.height = w;
+        canvas.width = w;
+
+        const ctx = ctxHS();
+        ctx.clearRect(0, 0, w, w);
+
+        const imageData = ctx.getImageData(0, 0, w, w);
+        const data = imageData.data;
+
+        let rhoColor = w / 2 * c.s;
+        let phiColor = c.h * Math.PI * 2 - Math.PI / 2;
+        let xColor = w / 2 + rhoColor * Math.cos(phiColor);
+        let yColor = w / 2 + rhoColor * Math.sin(phiColor);
+
+        const curColRadius = w * 0.02;
+
+        for (let x = 0; x < w; x++) {
+            for (let y = 0; y < w; y++) {
+                const dx = x - w / 2;
+                const dy = y - w / 2;
+                const index = (x + y * w) * 4;
+                const rad = Math.hypot(dx, dy) / (w / 2);
+                if (rad > 1) continue;
+                let r, g, b;
+                [r, g, b] = hlsToRgb((Math.atan2(dy, dx) * 0.5 / Math.PI + 1.25) % 1, c.l, rad);
+                data[index] = Math.round(r * 255);
+                data[index + 1] = Math.round(g * 255);
+                data[index + 2] = Math.round(b * 255);
+                data[index + 3] = 255;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        ctx.beginPath();
+        ctx.arc(xColor, yColor, curColRadius, 0, 2 * Math.PI);
+        ctx.stroke();
+    }
+
+    function clickCanvasHS(e) {
+        if (e.type == "mousemove" && !e.buttons) {
+            return;
+        }
+        const dx = e.pageX - e.currentTarget.offsetLeft - w / 2;
+        const dy = e.pageY - e.currentTarget.offsetTop - w / 2;
+        c.s = Math.hypot(dx, dy) / (w / 2);
+        c.h = (Math.atan2(dy, dx) * 0.5 / Math.PI + 1.25) % 1;
+        clamp();
+        moveHlsToRgb();
+        moveRgbToCmyk();
+        clamp();
+        reloadColor();
+    }
+
+    function canvasHS() {
+        return document.getElementById("hs-canvas");
+    }
+
+    function ctxHS() {
+        return canvasHS().getContext("2d");
+    }
+
+    c.r = 1;
+    c.g = 1;
+    c.b = 0.5;
+    updateFromRGB();
+
+    canvasHS().addEventListener("click", clickCanvasHS);
+    canvasHS().addEventListener("mousemove", clickCanvasHS);
+  </script>
+</body>
+</html>
